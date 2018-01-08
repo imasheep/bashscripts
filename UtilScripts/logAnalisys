@@ -1,0 +1,133 @@
+#!/bin/bash
+
+	cat $1|awk -F[][] -vRes_flag="0~1|1~3|3~10|10~30|30+" -vArgs="$*" -vModules_re="res|ip|domain|code|api" '
+		function splitline(){
+			print "---"
+		}
+		BEGIN{
+
+			ip_module_flag=0
+			domain_module_flag=0
+			code_module_flag=0
+			api_module_flag=0
+			res_module_flag=0
+
+
+			cmd="[ -f "Arg_array[1]" ]&&echo 1||echo 0"
+			cmd |getline file_exist
+			if (!file_exist) {
+				print "Wrong args, file "Arg_array[1]" not exist"
+				exit
+			}
+			if (!match(Args,/-m ?([a-z,]+)/,Module_array) || (Module_array[1] ~ /all/)) {
+				ip_module_flag=1
+				domain_module_flag=1
+				code_module_flag=1
+				api_module_flag=1
+				res_module_flag=1
+				req_module_flag=1
+			}else{
+				ip_module_flag=Module_array[1]~/ip/?1:0
+				domain_module_flag=Module_array[1]~/domain/?1:0
+				code_module_flag=Module_array[1]~/code/?1:0
+				api_module_flag=Module_array[1]~/api/?1:0
+				res_module_flag=Module_array[1]~/res/?1:0
+				req_module_flag=Module_array[1]~/req/?1:0
+			}
+
+			split(Res_flag,Rf,"|")
+			split(Args,Arg_array," ")
+		}
+		{
+			split($6,hour,":")
+			split($8,api_arr," |?")
+
+
+			if (res_module_flag) {
+				flag=$22<1?1:$22<3?2:$22<10?3:$22<30?4:5
+				res_time[hour[2]" "flag]++
+				req_count[hour[2]]++
+			}
+
+			if (domain_module_flag) {
+				domains_count[$20]++
+			}
+
+			if (ip_module_flag) {
+				ips_count[$2]++
+			}
+
+			if (code_module_flag) {
+				codes_count[$10]++
+			}
+
+			if (api_module_flag) {
+				ua_flag=$16~/ios/?1:$16~/android/?2:3
+				apis_ua_count[api_arr[2],ua_flag]++
+				apis_count[api_arr[2]]++
+			}
+
+
+		}
+		END{
+			if(!file_exist) {
+				exit
+			}
+
+			if (res_module_flag) {
+				splitline()
+				print "小时","合计",gensub("\\|"," ","g",Res_flag)
+				splitline()
+				for(i=0;i<24;i++){
+					cur_hour=sprintf("%02d",i)
+					printf("%s %s ",cur_hour,req_count[cur_hour]?req_count[cur_hour]:0)
+					for(j=1;j<=5;j++){
+						printf("%s ",res_time[cur_hour" "j]?res_time[cur_hour" "j]:0)
+					}
+					print " "
+				}
+			}
+
+			if (ip_module_flag) {
+				splitline()
+				print "ip访问统计排行"
+				splitline()
+				for(ip in ips_count){
+					print ip,ips_count[ip]|"sort -rnk2 | head"
+				}
+				close("sort -rnk2 | head")
+			}
+
+			if (domain_module_flag) {
+				splitline()
+				print "域名访问统计排行"
+				splitline()
+				for(domain in domains_count){
+					print domain,domains_count[domain]  |"sort -rnk2 | head"
+				}
+				close("sort -rnk2 | head")
+			}
+
+			if (code_module_flag) {
+				splitline()
+				print "状态码统计排行"
+				splitline()
+				for(code in codes_count){
+					print code,codes_count[code] |"sort -rnk2"
+				}
+				close("sort -rnk2")
+			}
+
+			if (api_module_flag) {
+				splitline()
+				print "api联合ua统计"
+				splitline()
+				print "api","总数","ios","android","other"
+				splitline()
+				for(api in apis_count){
+					print api,apis_count[api],apis_ua_count[api,1]?apis_ua_count[api,1]:0,apis_ua_count[api,2]?apis_ua_count[api,2]:0,apis_ua_count[api,3]?apis_ua_count[api,3]:0 | "sort -rnk2 | head -20"
+				}
+				close("sort -rnk2 | head -20")
+			}
+		}
+	'|column -t

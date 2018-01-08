@@ -1,0 +1,73 @@
+#!/bin/bash
+
+file_transfer_pub_domain="filetransfer.xxx.com"
+file_transfer_pri_domain="filetransfer.xxx.com"
+operation=$1
+file_flag=$2
+
+Show_help(){
+	echo "Usage : ft \${operation} \${file_flag}"
+}
+Check_args(){
+	[[ $operation =~ ^(pull|push) ]] \
+		||{
+			Show_help
+			exit
+		}
+	case $operation in
+		pull)
+
+			;;
+		push)
+			[ -e "$file_flag" ] \
+				|| {
+					echo "No such file or dirctory"
+					Show_help
+				}
+			;;
+	esac
+}
+Parse_args(){
+	[[ $HOSTNAME =~ ^(cld|prod) ]]  \
+		&& file_transfer_domain=$file_transfer_pri_domain \
+		|| file_transfer_domain=$file_transfer_pub_domain
+}
+
+Split_line(){
+	echo "-------------------------------------------------"
+}
+Transfer_files(){
+	case $operation in
+		pull)
+			rsync -az --progress $file_transfer_domain::filetransfer/$file_flag . 2>/dev/null \
+				&& {
+					Split_line
+					echo "Download succeed"
+					Split_line
+				}\
+				|| {
+					Split_line
+					echo "Download failed"
+					Split_line
+				}
+			;;
+		push)
+			random_flag=$(awk 'BEGIN{srand();printf("%04d\n", int(rand()*1000000%10000))}')
+			rsync -az --progress $file_flag $file_transfer_domain::filetransfer/$random_flag/\
+				&& {
+					Split_line
+					echo "Download commmand : ft pull $random_flag/${file_flag##*/}"
+					Split_line
+				}
+
+			;;
+	esac
+
+}
+
+Main(){
+	Check_args
+	Parse_args
+	Transfer_files
+}
+Main
